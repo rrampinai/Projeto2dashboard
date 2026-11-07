@@ -132,6 +132,7 @@ h1, h2, p { margin: 0; }
 }
 .btn-orange:hover { filter: brightness(1.06); }
 .btn-orange:disabled { opacity: 0.45; cursor: not-allowed; }
+.export-status { margin: 10px 0 0; color: #8ee0b4; font-size: 12px; line-height: 1.4; }
 .user {
   display: flex;
   align-items: center;
@@ -515,16 +516,47 @@ button:disabled { cursor: default; opacity: 0.45; }
   position: fixed;
   z-index: 30;
   pointer-events: none;
-  background: #0e0e12;
+  background: #141418;
   color: white;
-  border: 1px solid rgba(255, 122, 26, 0.4);
-  border-radius: 10px;
-  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0;
   font-size: 12px;
-  line-height: 1.4;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  max-width: 240px;
+  line-height: 1.35;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  min-width: 176px;
+  max-width: 260px;
+  overflow: hidden;
 }
+.tip-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px 7px;
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.tip-title i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+.tooltip dl {
+  margin: 0;
+  padding: 7px 10px 8px;
+  display: grid;
+  gap: 5px;
+}
+.tooltip dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.tooltip dt { color: #b7b7c0; font-weight: 500; }
+.tooltip dd { margin: 0; font-weight: 600; text-align: right; }
 
 .boot {
   padding: 28px;

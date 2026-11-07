@@ -1,4 +1,36 @@
 const CSV_URL = "dados_aleatorios.csv";
+const EMBEDDED_CSV = `nome,categoria,produto,valor,quantidade,total
+Ana Souza,Eletronicos,Fone Bluetooth,189.90,2,379.80
+Carlos Lima,Casa,Jogo de Panelas,249.00,1,249.00
+Mariana Alves,Alimentos,Cafe Torrado 500g,28.50,6,171.00
+Pedro Rocha,Vestuario,Camiseta Basica,59.90,3,179.70
+Julia Mendes,Eletronicos,Mouse Sem Fio,79.90,2,159.80
+Ricardo Nunes,Esportes,Bola de Futebol,89.00,1,89.00
+Fernanda Dias,Beleza,Shampoo 400ml,32.90,4,131.60
+Lucas Ferreira,Casa,Luminaria de Mesa,119.00,1,119.00
+Beatriz Costa,Alimentos,Azeite Extra Virgem,45.90,2,91.80
+Gabriel Martins,Vestuario,Calca Jeans,159.90,1,159.90
+Camila Barbosa,Eletronicos,Carregador USB-C,49.90,3,149.70
+Thiago Oliveira,Esportes,Halter 5kg,74.50,2,149.00
+Larissa Pinto,Beleza,Hidratante Corporal,39.90,2,79.80
+Rafael Gomes,Casa,Toalha de Banho,34.90,4,139.60
+Patricia Ribeiro,Alimentos,Granola 1kg,22.90,5,114.50
+Diego Santos,Vestuario,Tenis Casual,229.00,1,229.00
+Amanda Carvalho,Eletronicos,Teclado Mecanico,349.90,1,349.90
+Bruno Teixeira,Esportes,Corda de Pular,29.90,2,59.80
+Vanessa Moreira,Beleza,Protetor Solar FPS50,67.90,1,67.90
+Felipe Araujo,Casa,Organizador de Gaveta,42.00,3,126.00
+Isabela Freitas,Alimentos,Mel Silvestre 300g,31.50,2,63.00
+Henrique Lopes,Vestuario,Jaqueta Corta Vento,199.90,1,199.90
+Natalia Campos,Eletronicos,Caixa de Som Portatil,159.00,1,159.00
+Eduardo Vieira,Esportes,Garrafa Termica 750ml,54.90,2,109.80
+Sofia Martins,Beleza,Esmalte,12.90,6,77.40
+Marcelo Duarte,Casa,Tapete Antiderrapante,69.90,2,139.80
+Aline Correia,Alimentos,Chocolate 70% Cacau,18.90,8,151.20
+Gustavo Pires,Vestuario,Meia Esportiva,24.90,5,124.50
+Renata Farias,Eletronicos,Cabo HDMI 2m,35.00,2,70.00
+Vinicius Almeida,Esportes,Luva de Treino,44.90,2,89.80`;
+const EXPORT_KEY = "aurora.recorte.exportado";
 
 const CATEGORIES = [
   { id: "Eletronicos", label: "Eletrônicos", color: "#ff7a1a" },
@@ -114,6 +146,47 @@ function shareText(part, whole) {
   return `${pct.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% da base`;
 }
 
+function pctLabel(part, whole) {
+  if (!whole) return "0%";
+  return `${((part / whole) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+}
+
+function tipAttr(model) {
+  return `data-tip="${esc(JSON.stringify(model))}"`;
+}
+
+function showTip(host) {
+  const tip = $("tooltip");
+  const raw = host.getAttribute("data-tip");
+  if (!raw) return;
+  let model;
+  try {
+    model = JSON.parse(raw);
+  } catch {
+    tip.hidden = false;
+    tip.textContent = raw;
+    return;
+  }
+  const mark = model.color ? `<i style="background:${esc(model.color)}"></i>` : "";
+  const rows = (model.rows || []).map((row) => `<div><dt>${esc(row.label)}</dt><dd>${esc(row.value)}</dd></div>`).join("");
+  tip.hidden = false;
+  tip.innerHTML = `<p class="tip-title">${mark}${esc(model.title)}</p>${rows ? `<dl>${rows}</dl>` : ""}`;
+}
+
+function placeTip(clientX, clientY) {
+  const tip = $("tooltip");
+  const pad = 12;
+  const offset = 16;
+  const width = tip.offsetWidth;
+  const height = tip.offsetHeight;
+  let x = clientX + offset;
+  let y = clientY + offset;
+  if (x + width > window.innerWidth - pad) x = clientX - width - offset;
+  if (y + height > window.innerHeight - pad) y = clientY - height - offset;
+  tip.style.left = `${Math.max(pad, x)}px`;
+  tip.style.top = `${Math.max(pad, y)}px`;
+}
+
 function sparkline(values, id) {
   const w = 96;
   const h = 38;
@@ -214,9 +287,17 @@ function renderCategories() {
   const metric = state.metric;
   const values = CATEGORIES.map((category) => {
     const subset = rows.filter((row) => row.categoria === category.id);
-    const value = metric === "quantidade" ? sum(subset, "quantidade") : sum(subset, "total");
-    return { ...category, value, sales: subset.length };
+    const revenue = sum(subset, "total");
+    const units = sum(subset, "quantidade");
+    return {
+      ...category,
+      revenue,
+      units,
+      sales: subset.length,
+      value: metric === "quantidade" ? units : revenue,
+    };
   });
+  const whole = values.reduce((acc, item) => acc + item.value, 0);
   const max = Math.max(...values.map((item) => item.value), 0);
   const active = state.filters.categoria;
 
@@ -233,9 +314,25 @@ function renderCategories() {
       active && active !== item.id ? "is-dim" : "",
     ].filter(Boolean).join(" ");
     const label = metric === "quantidade" ? `${number.format(item.value)} un.` : formatCompact(item.value);
-    const tip = `${item.label}: ${metric === "quantidade" ? `${item.value} unidades` : money.format(item.value)} · ${item.sales} vendas`;
+    const tip = item.value > 0 ? tipAttr({
+      title: item.label,
+      color: item.color,
+      rows: metric === "quantidade"
+        ? [
+          { label: "Unidades", value: number.format(item.units) },
+          { label: "Participação", value: pctLabel(item.value, whole) },
+          { label: "Receita", value: money.format(item.revenue) },
+          { label: "Vendas", value: number.format(item.sales) },
+        ]
+        : [
+          { label: "Receita", value: money.format(item.revenue) },
+          { label: "Participação", value: pctLabel(item.value, whole) },
+          { label: "Unidades", value: number.format(item.units) },
+          { label: "Vendas", value: number.format(item.sales) },
+        ],
+    }) : "";
     const filterAttr = item.value > 0 ? `data-filter="categoria" data-value="${esc(item.id)}"` : "disabled";
-    return `<button type="button" class="${classes}" ${filterAttr} data-tip="${esc(tip)}" aria-pressed="${active === item.id}">
+    return `<button type="button" class="${classes}" ${filterAttr} ${tip} aria-pressed="${active === item.id}">
       <span class="bar-val">${esc(label)}</span>
       <span class="bar-track" aria-hidden="true"><span class="bar-fill" style="--h:${height}%"></span></span>
       <span class="bar-name">${esc(item.label)}</span>
@@ -259,7 +356,12 @@ function renderDonut() {
   const rows = getRows("faixa");
   const groups = BANDS.map((band) => {
     const subset = rows.filter((row) => bandOf(row.total).id === band.id);
-    return { ...band, value: sum(subset, "total"), sales: subset.length };
+    return {
+      ...band,
+      value: sum(subset, "total"),
+      units: sum(subset, "quantidade"),
+      sales: subset.length,
+    };
   });
   const drawn = groups.filter((group) => group.value > 0);
   const total = drawn.reduce((acc, group) => acc + group.value, 0);
@@ -279,10 +381,17 @@ function renderDonut() {
     const gap = drawn.length > 1 && end - start > 0.12 ? 0.03 : 0;
     const d = slicePath(105, 105, 86, 58, start + gap, end - gap);
     const classes = active && active !== group.id ? "is-dim" : "";
-    const tip = `${group.label}: ${money.format(group.value)} · ${group.sales} vendas`;
-    return `<path class="${classes}" data-filter="faixa" data-value="${group.id}" data-tip="${esc(tip)}" d="${d}" fill="${group.color}">
-      <title>${esc(tip)}</title>
-    </path>`;
+    const tip = tipAttr({
+      title: group.label,
+      color: group.color,
+      rows: [
+        { label: "Receita", value: money.format(group.value) },
+        { label: "Participação", value: pctLabel(group.value, total) },
+        { label: "Vendas", value: number.format(group.sales) },
+        { label: "Unidades", value: number.format(group.units) },
+      ],
+    });
+    return `<path class="${classes}" data-filter="faixa" data-value="${group.id}" ${tip} d="${d}" fill="${group.color}"></path>`;
   }).join("");
 
   const legend = groups.map((group) => {
@@ -319,6 +428,7 @@ function renderSales() {
   const rows = getRows("produto").slice();
   if (state.sort === "recente") rows.sort((a, b) => b._i - a._i);
   else rows.sort((a, b) => b.total - a.total || a.produto.localeCompare(b.produto, "pt-BR"));
+  const revenue = sum(rows, "total");
   const max = Math.max(...rows.map((row) => row.total), 0);
   const active = state.filters.produto;
   $("vendas-sub").textContent = rows.length
@@ -337,8 +447,15 @@ function renderSales() {
       active === row.produto ? "is-active" : "",
       active && active !== row.produto ? "is-dim" : "",
     ].filter(Boolean).join(" ");
-    const tip = `${row.nome} · ${categoryLabel(row.categoria)} · ${row.quantidade} un. × ${money.format(row.valor)}`;
-    return `<button type="button" class="${classes}" data-filter="produto" data-value="${esc(row.produto)}" data-tip="${esc(tip)}" aria-pressed="${active === row.produto}">
+    const tip = tipAttr({
+      title: row.produto,
+      color: categoryColor(row.categoria),
+      rows: [
+        { label: "Preço unitário", value: money.format(row.valor) },
+        { label: "Participação", value: pctLabel(row.total, revenue) },
+      ],
+    });
+    return `<button type="button" class="${classes}" data-filter="produto" data-value="${esc(row.produto)}" ${tip} aria-pressed="${active === row.produto}">
       <span class="sale-mark" style="background:${categoryColor(row.categoria)}">${esc(row.nome.slice(0, 1))}</span>
       <span>
         <b>${esc(row.produto)}</b>
@@ -394,9 +511,18 @@ function renderFlow(rows) {
   const dots = coords.map((coord) => {
     const point = coord[2];
     const active = state.filters.produto === point.row.produto ? "is-active" : "";
-    const tip = `${point.row.produto} · ${money.format(point.row.total)} · acumulado ${money.format(point.acc)}`;
+    const tip = tipAttr({
+      title: point.row.produto,
+      color: categoryColor(point.row.categoria),
+      rows: [
+        { label: "Venda", value: money.format(point.row.total) },
+        { label: "Acumulado", value: money.format(point.acc) },
+        { label: "Cliente", value: point.row.nome },
+        { label: "Categoria", value: categoryLabel(point.row.categoria) },
+      ],
+    });
     return `<circle class="dot ${active}" cx="${coord[0]}" cy="${coord[1]}" r="${active ? 5 : 3.5}"></circle>
-      <circle class="hit" data-filter="produto" data-value="${esc(point.row.produto)}" data-tip="${esc(tip)}" cx="${coord[0]}" cy="${coord[1]}" r="12"></circle>`;
+      <circle class="hit" data-filter="produto" data-value="${esc(point.row.produto)}" ${tip} cx="${coord[0]}" cy="${coord[1]}" r="16"></circle>`;
   }).join("");
   const xLabels = [0, Math.floor((points.length - 1) / 2), points.length - 1]
     .filter((value, index, list) => list.indexOf(value) === index)
@@ -546,13 +672,52 @@ function clearFilter(name) {
 function exportCSV() {
   const rows = getRows(null);
   const header = ["nome", "categoria", "produto", "valor", "quantidade", "total"];
-  const lines = [header.join(",")].concat(rows.map((row) => header.map((key) => row[key]).join(",")));
-  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const csv = [header.join(",")]
+    .concat(rows.map((row) => header.map((key) => row[key]).join(",")))
+    .join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = "recorte-vendas.csv";
   link.click();
   URL.revokeObjectURL(link.href);
+  saveExport(rows, csv);
+}
+
+function saveExport(rows, csv) {
+  const status = $("export-status");
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    fileName: "recorte-vendas.csv",
+    filters: { ...state.filters },
+    search: state.search.trim(),
+    metric: state.metric,
+    sort: state.sort,
+    rows: rows.map((row) => ({
+      nome: row.nome,
+      categoria: row.categoria,
+      produto: row.produto,
+      valor: row.valor,
+      quantidade: row.quantidade,
+      total: row.total,
+    })),
+    csv,
+  };
+  try {
+    localStorage.setItem(EXPORT_KEY, JSON.stringify(payload));
+    const when = new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(new Date());
+    const message = `${countLabel(rows.length, "venda salva", "vendas salvas")} no navegador · ${when}`;
+    status.hidden = false;
+    status.textContent = message;
+    $("live").textContent = message;
+  } catch {
+    status.hidden = false;
+    status.textContent = "O arquivo foi baixado, mas o navegador recusou gravar o recorte.";
+    $("live").textContent = status.textContent;
+  }
 }
 
 function bind() {
@@ -626,21 +791,30 @@ function bind() {
   document.body.addEventListener("pointerover", (event) => {
     const host = event.target.closest("[data-tip]");
     if (!host) return;
-    tip.hidden = false;
-    tip.textContent = host.getAttribute("data-tip");
+    showTip(host);
+    placeTip(event.clientX, event.clientY);
   });
   document.body.addEventListener("pointermove", (event) => {
     if (tip.hidden) return;
-    const x = Math.min(event.clientX + 14, window.innerWidth - tip.offsetWidth - 12);
-    const y = Math.min(event.clientY + 16, window.innerHeight - tip.offsetHeight - 12);
-    tip.style.left = `${x}px`;
-    tip.style.top = `${y}px`;
+    placeTip(event.clientX, event.clientY);
   });
   document.body.addEventListener("pointerout", (event) => {
     const host = event.target.closest("[data-tip]");
     if (!host) return;
     const next = event.relatedTarget && event.relatedTarget.closest ? event.relatedTarget.closest("[data-tip]") : null;
     if (next !== host) tip.hidden = true;
+  });
+  document.body.addEventListener("focusin", (event) => {
+    const host = event.target.closest("[data-tip]");
+    if (!host) return;
+    showTip(host);
+    const box = host.getBoundingClientRect();
+    placeTip(box.left + box.width / 2, box.top);
+  });
+  document.body.addEventListener("focusout", (event) => {
+    const host = event.target.closest("[data-tip]");
+    if (!host) return;
+    tip.hidden = true;
   });
 }
 
@@ -674,7 +848,11 @@ async function init() {
     if (!response.ok) throw new Error("não encontrado");
     boot(await response.text());
   } catch {
-    showFallback("Não foi possível ler dados_aleatorios.csv automaticamente.");
+    try {
+      boot(EMBEDDED_CSV);
+    } catch {
+      showFallback("Não foi possível ler a base de vendas.");
+    }
   }
 }
 

@@ -164,16 +164,9 @@ h1, h2, p { margin: 0; }
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  align-items: flex-end;
+  align-items: center;
 }
-.eyebrow {
-  color: var(--orange-2);
-  font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-h1 { font-size: 28px; letter-spacing: -0.03em; line-height: 1.15; }
-.lede { color: var(--muted); margin-top: 6px; font-size: 14px; }
+.lede { color: var(--muted); margin: 0; font-size: 14px; }
 .top-actions { display: flex; align-items: center; gap: 10px; }
 .search {
   display: flex;
@@ -602,7 +595,6 @@ button:disabled { cursor: default; opacity: 0.45; }
   .date-pill { display: none; }
   .kpis, .bot, .mid { grid-template-columns: 1fr; }
   .mix { grid-template-columns: 1fr; justify-items: center; }
-  h1 { font-size: 24px; }
   .kpi-value { font-size: 22px; }
 }
 @media (prefers-reduced-motion: reduce) {

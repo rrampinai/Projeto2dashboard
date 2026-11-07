@@ -850,8 +850,6 @@ function bind() {
 function boot(text) {
   state.rows = parseCSV(text);
   if (!state.rows.length) throw new Error("CSV vazio");
-  const hour = new Date().getHours();
-  $("greet").textContent = hour < 12 ? "Bom dia, Direção" : hour < 18 ? "Boa tarde, Direção" : "Boa noite, Direção";
   $("today").textContent = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
   bind();
   render();

@@ -117,6 +117,12 @@ function blankFilters() {
   return { categoria: null, faixa: null, produto: null };
 }
 
+function selectedCategories() {
+  const value = state.filters.categoria;
+  const ids = Array.isArray(value) ? value : value ? [value] : [];
+  return CATEGORIES.map((item) => item.id).filter((id) => ids.includes(id));
+}
+
 function fold(value) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
@@ -124,7 +130,8 @@ function fold(value) {
 function getRows(except) {
   const query = fold(state.search.trim());
   return state.rows.filter((row) => {
-    if (except !== "categoria" && state.filters.categoria && row.categoria !== state.filters.categoria) return false;
+    const categories = selectedCategories();
+    if (except !== "categoria" && categories.length && !categories.includes(row.categoria)) return false;
     if (except !== "faixa" && state.filters.faixa && bandOf(row.total).id !== state.filters.faixa) return false;
     if (except !== "produto" && state.filters.produto && row.produto !== state.filters.produto) return false;
     if (!query) return true;
@@ -299,19 +306,20 @@ function renderCategories() {
   });
   const whole = values.reduce((acc, item) => acc + item.value, 0);
   const max = Math.max(...values.map((item) => item.value), 0);
-  const active = state.filters.categoria;
+  const selected = selectedCategories();
 
-  if (!rows.length && !active) {
+  if (!rows.length && !selected.length) {
     $("chart-categorias").innerHTML = `<p class="empty">Nenhuma venda neste recorte.</p>`;
     return;
   }
 
   $("chart-categorias").innerHTML = `<div class="bars">${values.map((item) => {
     const height = max ? (item.value / max) * 100 : 0;
+    const on = selected.includes(item.id);
     const classes = [
       "bar-col",
-      active === item.id ? "is-active" : "",
-      active && active !== item.id ? "is-dim" : "",
+      on ? "is-active" : "",
+      selected.length && !on ? "is-dim" : "",
     ].filter(Boolean).join(" ");
     const label = metric === "quantidade" ? `${number.format(item.value)} un.` : formatCompact(item.value);
     const tip = item.value > 0 ? tipAttr({
@@ -332,7 +340,7 @@ function renderCategories() {
         ],
     }) : "";
     const filterAttr = item.value > 0 ? `data-filter="categoria" data-value="${esc(item.id)}"` : "disabled";
-    return `<button type="button" class="${classes}" ${filterAttr} ${tip} aria-pressed="${active === item.id}">
+    return `<button type="button" class="${classes}" ${filterAttr} ${tip} aria-pressed="${on}">
       <span class="bar-val">${esc(label)}</span>
       <span class="bar-track" aria-hidden="true"><span class="bar-fill" style="--h:${height}%"></span></span>
       <span class="bar-name">${esc(item.label)}</span>
@@ -594,7 +602,8 @@ function renderInsight(rows) {
   const top = rows.reduce((best, row) => (row.total > best.total ? row : best));
   $("insight-text").textContent = `${leader.label} concentra ${share.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% da receita deste recorte (${money.format(leader.value)}). O ticket médio está em ${money.format(ticket)} e a maior venda é ${top.produto}, de ${top.nome}.`;
 
-  const already = state.filters.categoria === leader.id && !state.filters.faixa && !state.filters.produto && !state.search;
+  const selected = selectedCategories();
+  const already = selected.length === 1 && selected[0] === leader.id && !state.filters.faixa && !state.filters.produto && !state.search;
   state.lead = already ? { mode: "clear" } : { mode: "apply", categoria: leader.id };
   button.textContent = already ? "Ver base completa" : `Filtrar ${leader.label}`;
   button.disabled = false;
@@ -602,7 +611,8 @@ function renderInsight(rows) {
 
 function filterDescription() {
   const parts = [];
-  if (state.filters.categoria) parts.push(categoryLabel(state.filters.categoria));
+  const categories = selectedCategories();
+  if (categories.length) parts.push(categories.map(categoryLabel).join(" + "));
   if (state.filters.faixa) parts.push(BANDS.find((band) => band.id === state.filters.faixa).label);
   if (state.filters.produto) parts.push(state.filters.produto);
   if (state.search.trim()) parts.push(`busca “${state.search.trim()}”`);
@@ -623,7 +633,9 @@ function renderChrome(rows) {
   } else {
     chips.hidden = false;
     const items = [];
-    if (state.filters.categoria) items.push(`<button type="button" class="chip" data-clear="categoria">${esc(categoryLabel(state.filters.categoria))} ×</button>`);
+    selectedCategories().forEach((id) => {
+      items.push(`<button type="button" class="chip" data-clear="categoria:${esc(id)}">${esc(categoryLabel(id))} ×</button>`);
+    });
     if (state.filters.faixa) items.push(`<button type="button" class="chip" data-clear="faixa">${esc(BANDS.find((band) => band.id === state.filters.faixa).label)} ×</button>`);
     if (state.filters.produto) items.push(`<button type="button" class="chip" data-clear="produto">${esc(state.filters.produto)} ×</button>`);
     if (state.search.trim()) items.push(`<button type="button" class="chip" data-clear="search">Busca: ${esc(state.search.trim())} ×</button>`);
@@ -650,8 +662,21 @@ function render() {
   renderChrome(rows);
 }
 
-function toggleFilter(dim, value) {
-  state.filters[dim] = state.filters[dim] === value ? null : value;
+function toggleFilter(dim, value, additive) {
+  if (dim === "categoria") {
+    const current = selectedCategories();
+    let next;
+    if (additive) {
+      next = current.includes(value) ? current.filter((id) => id !== value) : current.concat(value);
+    } else if (current.length === 1 && current[0] === value) {
+      next = [];
+    } else {
+      next = [value];
+    }
+    state.filters.categoria = next.length ? next : null;
+  } else {
+    state.filters[dim] = state.filters[dim] === value ? null : value;
+  }
   render();
 }
 
@@ -663,6 +688,10 @@ function clearFilter(name) {
   } else if (name === "search") {
     state.search = "";
     $("q").value = "";
+  } else if (name.startsWith("categoria:")) {
+    const id = name.slice("categoria:".length);
+    const next = selectedCategories().filter((item) => item !== id);
+    state.filters.categoria = next.length ? next : null;
   } else {
     state.filters[name] = null;
   }
@@ -729,7 +758,7 @@ function bind() {
     }
     const filter = event.target.closest("[data-filter]");
     if (filter && !filter.disabled) {
-      toggleFilter(filter.dataset.filter, filter.dataset.value);
+      toggleFilter(filter.dataset.filter, filter.dataset.value, event.ctrlKey || event.metaKey);
       return;
     }
     const metric = event.target.closest("[data-metric]");
@@ -778,7 +807,7 @@ function bind() {
       state.search = "";
       $("q").value = "";
     } else {
-      state.filters = { categoria: state.lead.categoria, faixa: null, produto: null };
+      state.filters = { categoria: [state.lead.categoria], faixa: null, produto: null };
     }
     render();
   });

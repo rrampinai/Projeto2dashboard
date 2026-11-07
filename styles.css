@@ -247,6 +247,9 @@ h1 { font-size: 28px; letter-spacing: -0.03em; line-height: 1.15; }
 .kpi:first-child::before {
   background: linear-gradient(90deg, transparent, var(--orange), transparent);
 }
+.kpi:first-child .kpi-value {
+  color: #ff4d4d;
+}
 .kpi-label {
   color: var(--muted);
   font-size: 12px;
